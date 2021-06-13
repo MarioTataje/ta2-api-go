@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -21,7 +22,13 @@ type CovidDeath struct {
 	District       string  `json:"district"`
 }
 
-func readCSVFromUrl(url string)([][]string, error){
+type Filters struct {
+	FilterOne     string   `json:"filter_one"`
+	FilterTwo     string   `json:"Filter_two"`
+}
+
+func readCSVFromUrl()([][]string, error){
+	url := "https://raw.githubusercontent.com/MarioTataje/tb2-dataset/main/fallecidos_covid.csv"
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -42,7 +49,11 @@ func readCSVFromUrl(url string)([][]string, error){
 	return data, nil
 }
 
-func getCovidDeathsFromData(data[][] string) []CovidDeath {
+func getCovidDeathsFromData() []CovidDeath {
+	data, err := readCSVFromUrl()
+	if err != nil{
+		panic(err)
+	}
 	var covidDeaths []CovidDeath
 	for _, line := range data{
 		covidDeath := CovidDeath{
@@ -62,7 +73,7 @@ func getCovidDeathsFromData(data[][] string) []CovidDeath {
 	return covidDeaths
 }
 
-func home(w http.ResponseWriter, r *http.Request) {
+func homeController(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers","Content-Type,access-control-allow-origin, access-control-allow-headers")
@@ -87,20 +98,25 @@ func covidDeathsController(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers","Content-Type,access-control-allow-origin, access-control-allow-headers")
-
+	covidDeaths := getCovidDeathsFromData()
 	switch r.Method {
 	case "GET":
 		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte(`{"message": "This is the covid deaths"}`))
+		err := json.NewEncoder(w).Encode(covidDeaths)
 		if err != nil {
 			return
 		}
+		//_, err := w.Write([]byte(`{"message": "This is the covid deaths"}`))
 	case "POST":
+		var filter Filters
+		_ = json.NewDecoder(r.Body).Decode(& filter)
+		fmt.Println(filter)
 		w.WriteHeader(http.StatusCreated)
-		_, err := w.Write([]byte(`{"message": "This is the covid deaths post"}`))
+		err := json.NewEncoder(w).Encode(filter)
 		if err != nil {
 			return
 		}
+		
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_, err := w.Write([]byte(`{"message": "not found"}`))
@@ -110,15 +126,13 @@ func covidDeathsController(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func main() {
-	url := "https://raw.githubusercontent.com/MarioTataje/tb2-dataset/main/fallecidos_covid.csv"
-	data, err := readCSVFromUrl(url)
-	if err != nil {
-		panic(err)
-	}
-	covidDeaths := getCovidDeathsFromData(data)
-	fmt.Println(covidDeaths)
-	http.HandleFunc("/", home)
-	http.HandleFunc("/covid-deaths", covidDeathsController)
+func manageRoutes(){
+	http.HandleFunc("/", homeController)
+	http.HandleFunc("/api/covid-deaths", covidDeathsController)
+	log.Println("Application has been started on : 8090")
 	log.Fatal(http.ListenAndServe(":8090", nil))
+}
+
+func main() {
+	manageRoutes()
 }
